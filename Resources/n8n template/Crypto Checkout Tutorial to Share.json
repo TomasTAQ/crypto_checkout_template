@@ -1,0 +1,1197 @@
+{
+  "name": "Crypto Checkout Tutorial to Share",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crypto_checkout",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        640
+      ],
+      "id": "b3afdee0-ecbf-4155-b0ef-dc58bfdeb7d0",
+      "name": "Webhook",
+      "webhookId": "e70265d6-064b-4975-8ade-4d98622fa0c5"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "doCryptoPayment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "e1c9b7c9-b62e-4c00-bde7-ca0f272d2962"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "doCryptoPayment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "40cf2378-7c8a-4d6d-a4f4-02d5db9c1b33",
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "processCryptoPayment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "processCryptoPayment"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -288,
+        624
+      ],
+      "id": "1ea0a64a-8078-4a34-97be-6070886688e2",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7d7e9e4b-32b3-4f57-8956-ebbcbf01c27f",
+              "name": "invoiceNumberString",
+              "value": "={{ $('Get transaction').item.json.id.toString().padStart(4, '0') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1264,
+        1184
+      ],
+      "id": "1f508511-9eee-4877-9f1d-57aea0eaec98",
+      "name": "InvoiceNumberString"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ff5e69b0-5825-4c90-9324-9530c3629eb3",
+              "name": "date",
+              "value": "={{ String($('Webhook').item.json.body.order.txDate).split('T')[0] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1088,
+        1184
+      ],
+      "id": "4205200a-d753-4b1a-8acd-813c250da3fd",
+      "name": "Date"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7ca83eda-891f-4328-8f82-e7b35bb23c6d",
+              "leftValue": "={{ $json.price }}",
+              "rightValue": "={{ Number($('Webhook').item.json.body.amount) }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        368
+      ],
+      "id": "11bcf21d-bc94-4513-be63-e277ebe71c3f",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"message\": \"Request with incorrect payment amount\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        576,
+        464
+      ],
+      "id": "761d9eab-6d90-4fea-b6a6-08057c39d59a",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7ca83eda-891f-4328-8f82-e7b35bb23c6d",
+              "leftValue": "={{ $json.price }}",
+              "rightValue": "={{ Number($json.payments[0].amount) }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cd528192-e0f1-461d-aa15-02b04af4c3ee",
+              "leftValue": "={{ $json.requestId }}",
+              "rightValue": "={{ $('Get transaction').item.json.requestNetworkID }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "8c6f1c1c-d311-43a4-8047-96ec68bb44f3",
+              "leftValue": "={{ $('Get product').item.json.productName }}",
+              "rightValue": "={{ $('Webhook').item.json.body.order.product }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a5be8844-c598-48f4-abac-7a0b81a09c8e",
+              "leftValue": "={{ $('Webhook').item.json.body.buyer.email }}",
+              "rightValue": "={{ $('Get transaction').item.json.email }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "bc0db4b8-7d91-4f33-a810-eddc7a9c6ce8",
+              "leftValue": "={{ $json.payments[0].currency }}",
+              "rightValue": "USD",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        848,
+        1184
+      ],
+      "id": "ed3b5a2e-c1a9-4c93-bfae-480048cf41e1",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.request.network/v2/request",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payee"
+            },
+            {
+              "name": "amount",
+              "value": "={{ $('Webhook').item.json.body.amount }}"
+            },
+            {
+              "name": "invoiceCurrency",
+              "value": "=USD"
+            },
+            {
+              "name": "paymentCurrency",
+              "value": "={{ $('Webhook').item.json.body.paymentCurrency }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        256
+      ],
+      "id": "b5797852-44c4-4c53-a4d3-bac3d4a264fe",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.request.network/v2/request/{{ $('HTTP Request2').item.json.requestId }}/pay",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payee",
+              "value": "="
+            },
+            {
+              "name": "amount",
+              "value": "={{ $('Webhook').item.json.body.amount }}"
+            },
+            {
+              "name": "invoiceCurrency",
+              "value": "=USD"
+            },
+            {
+              "name": "paymentCurrency",
+              "value": "={{ $('Webhook').item.json.body.paymentCurrency }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1088,
+        368
+      ],
+      "id": "3ab6d7f1-557b-4202-b83d-9f372f036ef1",
+      "name": "HTTP Request3"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1472,
+        272
+      ],
+      "id": "6d1d6a31-26e5-4e62-b5c3-01c7d5e58897",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "mode": "combineBySql"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        1296,
+        272
+      ],
+      "id": "5d4417b4-7ae5-46c1-8020-58355ceeb33a",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.request.network/v2/request/{{ $('Webhook').item.json.body.order.requestId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        544,
+        928
+      ],
+      "id": "0222cc64-a0b4-4cea-8c2e-9bef5a848c81",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7ca83eda-891f-4328-8f82-e7b35bb23c6d",
+              "leftValue": "={{ $json.requestNetworkPaymentReference }}",
+              "rightValue": "={{ Number($('Webhook').item.json.body.amount) }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        272,
+        1184
+      ],
+      "id": "611a0189-ef5f-4085-8975-3db58f2cec48",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"message\": \"json.requestNetworkPaymentReference is empty\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        1424
+      ],
+      "id": "ca157840-8ebe-47e1-a562-f11363d5e9c1",
+      "name": "Respond to Webhook3"
+    },
+    {
+      "parameters": {
+        "errorMessage": "json.requestNetworkPaymentReference is empty"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        672,
+        1424
+      ],
+      "id": "194e74df-55c6-46ac-8870-da6616f2a9ce",
+      "name": "Stop and Error"
+    },
+    {
+      "parameters": {
+        "errorMessage": "Request with incorrect payment amount"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        768,
+        528
+      ],
+      "id": "aad40036-7508-4e76-937e-aa736fc9f929",
+      "name": "Stop and Error1"
+    },
+    {
+      "parameters": {
+        "mode": "combineBySql",
+        "query": "SELECT * FROM input1 JOIN input2"
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        672,
+        1184
+      ],
+      "id": "cda2264c-345c-45fd-bfe9-291c6513ca11",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"message\": \"Payment with incorrect amount, ID or product\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        1424
+      ],
+      "id": "fe0b817e-6b6f-4780-9cc5-d6fd9dfaf476",
+      "name": "Respond to Webhook4"
+    },
+    {
+      "parameters": {
+        "errorMessage": "Payment with incorrect amount, ID or product"
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        1424
+      ],
+      "id": "5622b038-1e29-4b5b-a0c2-b44b926755ee",
+      "name": "Stop and Error2"
+    },
+    {
+      "parameters": {
+        "content": "# Payment: control + requestNetwork 🕵🏻‍♂️ . 💸",
+        "height": 604,
+        "width": 1728,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        96
+      ],
+      "id": "21f82c5e-2cb9-4092-a963-1471aec805e6",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "# ProcessCryptoPayment: control + invoice + mighty access 🕵🏻‍♂️ . ⚙️ . 🧾",
+        "height": 904,
+        "width": 1732
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        0,
+        720
+      ],
+      "typeVersion": 1,
+      "id": "2336f5bf-50dd-47c2-b709-a1e7b1cc101b",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c489fcee-0943-4821-9624-8aad293c462d",
+              "leftValue": "={{ $json.hasBeenPaid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        928
+      ],
+      "id": "0c072ca5-76e6-43b4-968a-24edb9879ef1",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        848
+      ],
+      "id": "17f34b31-4218-48fb-8b9d-89a5aa15cd0d",
+      "name": "Wait",
+      "webhookId": "0b0d066f-b44d-4b92-80b9-ce6120550296"
+    },
+    {
+      "parameters": {
+        "amount": 5.5
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        400,
+        992
+      ],
+      "id": "842403df-2469-44db-a3de-fff76ead9766",
+      "name": "Wait1",
+      "webhookId": "4682c71c-601a-4034-9f26-1b9d4b3e9046"
+    },
+    {
+      "parameters": {
+        "content": "# Trigger ⚡️",
+        "height": 296,
+        "width": 560,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -576,
+        544
+      ],
+      "id": "ea736885-071a-47e9-9cf0-e9ab7aef9c67",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "ProductsTest",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "productName",
+              "keyValue": "={{ $('Webhook').item.json.body.buyer.product }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        240,
+        368
+      ],
+      "id": "0bb0aa15-d50d-428c-9b69-02201541ad3e",
+      "name": "Get a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "FOz0jvihpainepna",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "CryptoInvoices",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $('Webhook').item.json.body.buyer.email }}"
+            },
+            {
+              "fieldId": "productName",
+              "fieldValue": "={{ $('Webhook').item.json.body.buyer.product }}"
+            },
+            {
+              "fieldId": "requestNetworkID",
+              "fieldValue": "={{ $json.requestId }}"
+            },
+            {
+              "fieldId": "requestNetworkPaymentReference",
+              "fieldValue": "={{ $json.paymentReference }}"
+            },
+            {
+              "fieldId": "paymentStatus",
+              "fieldValue": "request payment"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        896,
+        368
+      ],
+      "id": "bc760e1a-a648-4b3a-a05b-5278f1414221",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "FOz0jvihpainepna",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Payment Control 🔍",
+        "height": 344,
+        "width": 544,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        320,
+        800
+      ],
+      "id": "1dd2252d-a58c-431b-aa50-ac8a6f433613",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "content": "## Email 🧾",
+        "height": 280,
+        "width": 672,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        1104
+      ],
+      "id": "f7cbc9dc-15ca-4298-b283-5e03887005bb",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "ProductsTest",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "productName",
+              "keyValue": "={{ $('Webhook').item.json.body.order.product }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        480,
+        1184
+      ],
+      "id": "a25b594b-b02f-41b0-9444-dc4ff2f5d08b",
+      "name": "Get product",
+      "credentials": {
+        "supabaseApi": {
+          "id": "FOz0jvihpainepna",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "CryptoInvoices",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "requestNetworkID",
+              "keyValue": "={{ $json.body.order.requestId }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        112,
+        1184
+      ],
+      "id": "3f40ca8a-b4eb-4f44-86ac-02dfb64ad038",
+      "name": "Get transaction",
+      "credentials": {
+        "supabaseApi": {
+          "id": "FOz0jvihpainepna",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "CryptoInvoices",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "requestNetworkPaymentReference",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').item.json.body.order.paymentReference.toString() }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "price",
+              "fieldValue": "={{ $('Webhook').item.json.body.order.amount }}"
+            },
+            {
+              "fieldId": "paymentStatus",
+              "fieldValue": "paid"
+            },
+            {
+              "fieldId": "transactionHash",
+              "fieldValue": "={{ $('Merge3').item.json.txHash }}"
+            },
+            {
+              "fieldId": "paymentCurrency",
+              "fieldValue": "={{ $('Merge3').item.json.payments[0].paymentCurrency }}"
+            },
+            {
+              "fieldId": "paymentNetwork",
+              "fieldValue": "={{ $('Merge3').item.json.payments[0].sourceNetwork }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        1424
+      ],
+      "id": "530cbd60-b147-40ae-a8cd-deb20539d624",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "FOz0jvihpainepna",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Webhook').item.json.body.buyer.email }}",
+        "subject": "=🟪 Invoice of {{ $('Webhook').item.json.body.order.product }}",
+        "message": "=<p>Hi {{ $('Webhook').item.json.body.buyer.firstName }},</p>\n\n<p>This is a confirmation we received your payment Test for product <strong>{{ $('Webhook').item.json.body.order.product }}</strong>.</p>\n\n<p>Best regards,</p>\n\n<p><strong>The Accountant Quits Team</strong></p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1456,
+        1184
+      ],
+      "id": "7df4f29b-d821-4cda-9e4e-f6351e62d5bf",
+      "name": "Send a message",
+      "webhookId": "38df20d7-d9aa-438c-9ef5-9b21dc949693",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "OtzumCsO2x0YmpIS",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        960
+      ],
+      "id": "5f4dde84-3940-486e-a4ca-aff9c778d3c9",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Get a row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get transaction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "InvoiceNumberString": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Date": {
+      "main": [
+        [
+          {
+            "node": "InvoiceNumberString",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get product",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook3": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook4": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Date",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get product": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get transaction": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ba24001e-49b7-4561-aaa6-14ad1e914b8a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "869ede59ee58d1bde90e303dcb9a27f72652bb174e7bb78e732e5979eead5e2e"
+  },
+  "id": "JwCowbSuxYciQWyu",
+  "tags": []
+}

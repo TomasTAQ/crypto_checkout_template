@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crypto Checkout Widget</title>
+
+<!-- TailwindCSS (quick CDN build for demo purposes) -->
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+<!-- React will render everything inside this root div -->
+<div id="root"></div>
+
+<!-- React -->
+<script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+<!-- Babel so the browser can understand the JSX below -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Ethers.js (UMD build exposes `window.ethers`) -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@5/dist/ethers.umd.min.js"></script>
+
+<!-- === Widget code === -->
+<script type="text/babel">
+    /* React hooks and external libs come from global objects */
+    const { useState, useEffect } = React;
+    const { ethers } = window;
+
+    /* ---- CONFIG: UX / UI assets, product, payment currencies & networks ---- */
+    // UX/UI assets
+    const headerLogo = "https://storage.googleapis.com/certificates.theaccountantquits.com/assets/REPLACE%20WITH%20YOUR%20LOGO%20HERE.png";
+    const logoLight = "https://storage.googleapis.com/certificates.theaccountantquits.com/assets/logo-sec-dark-bg.png";
+    const heroImage = "https://storage.googleapis.com/certificates.theaccountantquits.com/assets/tutorialproductimage.png";
+    
+    // variables
+    const emailSupport = 'info@theaccountantquits.com';
+    const title = 'Crypto Checkout'
+    const subtitle = '[replace with your tagline]'
+    const companyName = 'Build On Story LLC'
+    const n8nUrl = 'https://n8n.srv923451.hstgr.cloud/webhook/41812f8e-58d1-4db3-b5e9-6d31492b2fa0'
+
+    const colorBrand1 = "indigo-600"
+
+    // payment options
+    const paymentCurrencyOptions = [
+    { label: "USDC", value: "USDCn" },
+    { label: "USDT", value: "USDT" }
+    ];
+
+    const paymentNetworkOptions = [
+    { label: "Ethereum", value: "mainnet" },
+    { label: "Polygon", value: "matic" }
+    ];
+
+    // products
+    const products = [
+    "Product1"
+    ,"Product2"
+    ];
+
+    const productPrices = {
+    Product1: 0.1
+    ,Product2: 17
+    };
+
+    const productNames = {
+    Product1: "Product Name 1"
+    ,Product2: "Product Name 2"
+    };
+    /* ---- END OF CONFIG ---- */
+    
+    /* ---- DO NOT CHANGE ASSETS ---- */
+    const iconETH = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.16.0/svg/color/eth.svg";
+    const iconUSDC = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.16.0/svg/color/usdc.svg";
+    const iconPolygon = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/svg/color/matic.svg";
+    const iconDAI = "https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.16.0/svg/color/dai.svg";
+
+    function getProductPriceFromUrl(productKey) {
+    if (productKey && productPrices[productKey]) {
+        return productPrices[productKey];
+    }
+    return null;
+    }
+
+    function getProductNameFromUrl(productKey) {
+    if (productKey && productNames[productKey]) {
+        return productNames[productKey];
+    }
+    return null;
+    }
+
+    function getProductKeyFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('product');
+    }
+
+    function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function App() {
+    const productFromUrl = getProductKeyFromUrl();
+
+    // Calculate selectedProduct: URL property product or first in products if empty
+    const selectedProduct = productFromUrl;
+
+    // Update buyer state
+    const [buyer, setBuyer] = useState({
+        firstName: "",
+        lastName: "",
+        email: "",
+        product: selectedProduct
+    });
+
+    useEffect(() => {
+        // Sync buyer.product if selectedProduct changes
+        if (buyer.product !== selectedProduct) {
+        setBuyer(prev => ({ ...prev, product: selectedProduct }));
+        }
+    }, [selectedProduct]);
+
+    const [formSaved, setFormSaved] = useState(false);
+    const [signer, setSigner] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+    const [hasBeenPaid, setHasBeenPaid] = useState(false);
+    const [txHash, setTxHash] = useState("");
+    const [txDate, setTxDate] = useState("");
+
+    const [selectedPaymentCurrency, setSelectedPaymentCurrency] = useState(paymentCurrencyOptions[0].value);
+    const [selectedPaymentNetwork, setSelectedPaymentNetwork] = useState(paymentNetworkOptions[0].value);
+
+    const connectWallet = async () => {
+        if (!window.ethereum) {
+        alert("MetaMask is not installed");
+        return null;
+        }
+        // Accept any current chain so we don't throw NETWORK_ERROR if the user
+        // switches between Sepolia, Polygon or Mainnet
+        const provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+        provider.on("network", (newNetwork, oldNetwork) => {
+        if (oldNetwork) {
+            // Force a reload so state & chain stay in sync
+            window.location.reload();
+        }
+        });
+        await provider.send("eth_requestAccounts", []);
+        return provider.getSigner();
+    };
+
+    const handleConnectWallet = async () => {
+        const s = await connectWallet();
+        if (s) setSigner(s);
+    };
+
+    const initiatePayment = async () => {
+        if (!signer) {
+        alert("Connect your wallet first");
+        return;
+        }
+        if (isProcessing) {
+        console.warn("Payment already in progress");
+        return;
+        }
+        // --- A. Proactively open MetaMask with a network‑switch request ---
+        // Doing this *inside the user‑click call stack* guarantees the browser
+        // still counts it as a user gesture, so the MetaMask confirmation window
+        // pops up instead of hiding behind the extension icon.
+        const CHAIN_ID_HEX = {
+        mainnet:        "0x1",        // Ethereum Mainnet
+        matic:          "0x89",       // Polygon PoS
+        "sepolia-sepolia": "0xaa36a7" // Sepolia testnet (11155111)
+        }[selectedPaymentNetwork];
+
+        try {
+        if (CHAIN_ID_HEX) {
+            await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: CHAIN_ID_HEX }]
+            });
+        }
+        } catch (err) {
+        // If the user rejects the switch, abort early so we don't queue txs
+        if (err?.code === 4001) { // 4001 = user rejected
+            console.warn("User aborted network switch");
+            return;
+        }
+        // If the chain isn't added yet (4902), you could add it here.
+        console.error("wallet_switchEthereumChain error:", err);
+        alert("Please add or enable the selected network in MetaMask first.");
+        return;
+        }
+        setIsProcessing(true);
+        try {
+        const requestBody = {
+            amount: amountInUSD.toString(),
+            // invoiceCurrency: "USD",
+            paymentCurrency: `${selectedPaymentCurrency}-${selectedPaymentNetwork}`,
+            action: "doCryptoPayment",
+            buyer: {
+            firstName: buyer.firstName,
+            lastName: buyer.lastName,
+            email: buyer.email,
+            productCode: buyer.product,
+            product: productName
+            }
+        };
+        
+        const response = await fetch(n8nUrl, {
+            method: "POST",
+            headers: {
+            "Content-Type": "application/json"
+            //"x-api-key": import.meta.env.VITE_REQUEST_NETWORK_API_KEY
+            },
+            body: JSON.stringify(requestBody)
+        });
+        const data = await response.json();
+        // --- 1. Validate response ---
+        const { transactions = [], metadata } = data;
+        if (!transactions.length) {
+            console.error("No transactions returned:", data);
+            return;
+        }
+
+        // --- 2. If Request Network indicates an approval step, tell the user ---
+        if (metadata?.needsApproval) {
+            alert("First you'll sign a first approval, then the actual payment. Your wallet will show two transactions.");
+        }
+
+        // --- 3. Iterate over the calldata bundle in order ---
+        for (let i = 0; i < transactions.length; i++) {
+            const tx = transactions[i];
+            const txParams = {
+            to: tx.to,
+            data: tx.data,
+            };
+
+            // Normalise `value` → omit if zero, otherwise convert to BigNumber
+            const rawVal = tx.value?.hex ?? tx.value ?? "0x0";
+            if (rawVal !== 0 && rawVal !== "0" && rawVal !== "0x0") {
+            txParams.value = ethers.BigNumber.from(rawVal);
+            }
+
+            const resp = await signer.sendTransaction(txParams);
+            console.log(`Transaction #${i} sent:`, resp.hash);
+            await resp.wait();
+            console.log(`Transaction #${i} confirmed`);
+
+            // Capture hash/date of the *last* tx for the UI
+            if (i === transactions.length - 1) {
+            setTxHash(resp.hash);
+            setTxDate(new Date().toLocaleString());
+            }
+        }
+
+        setPaymentConfirmed(true);
+
+        // --- 4. Notify backend with single payload once both steps are done ---
+        const payload = {
+            action: "processCryptoPayment",
+            buyer,
+            order: {
+            amount: amountInUSD,
+            product: productName,
+            // txHash: txHash, // set above
+            txDate: new Date().toISOString(),
+            paymentCurrency: selectedPaymentCurrency,
+            paymentNetwork: selectedPaymentNetwork,
+            requestId: data.requestId,
+            paymentReference: data.paymentReference,
+            paymentCurrency: `${selectedPaymentCurrency}-${selectedPaymentNetwork}`
+            }
+        };
+
+        await fetch(n8nUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(r => r.json())
+            .then(res => {
+              console.log("Webhook OK:", res);
+              if (res?.hasBeenPaid) {
+                setHasBeenPaid(true);
+              }
+            })
+            .catch(err => console.error("Webhook error:", err));
+        } catch (error) {
+        console.error('initiatePayment error:', error);
+        alert(`❗ Payment failed. Please try again or contact support at ${emailSupport}.`);
+        } finally {
+        setIsProcessing(false);
+        }
+    };
+
+    // Determine price from selectedProduct
+    const priceFromUrl = getProductPriceFromUrl(selectedProduct);
+    const productNameFromUrl = getProductNameFromUrl(selectedProduct);
+    const defaultPrice = productPrices[products[0]];
+    const amountInUSD = priceFromUrl !== null ? priceFromUrl : defaultPrice;
+    const isProductValid = priceFromUrl !== null;
+
+    // We'll use selectedProduct as the productKey and productName in display
+    const productKey = selectedProduct;
+    const productName = productNameFromUrl || productNames[selectedProduct] || products[0];
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setBuyer(prev => {
+        // If changing product, update selectedProduct
+        if (name === 'product') {
+            if (products.includes(value)) {
+            setSelectedProduct(value);
+            }
+            return { ...prev, product: value };
+        }
+        return { ...prev, [name]: value };
+        });
+        setFormSaved(false); // Si cambia algo, requiere volver a guardar
+    };
+
+    const isFormValid =
+        buyer.firstName.trim() &&
+        buyer.lastName.trim() &&
+        isValidEmail(buyer.email);
+
+    const handleSave = (e) => {
+        e.preventDefault();
+        if (isFormValid) setFormSaved(true);
+    };
+
+    // Progress steps
+    const steps = ["Your Info", "Connect Your Wallet", "Confirm Payment"];
+    const stepIndex = !formSaved ? 0 : !signer ? 1 : 2;
+
+    // Obtener el label de la currency y network seleccionados
+    const selectedPaymentCurrencyLabel = paymentCurrencyOptions.find(opt => opt.value === selectedPaymentCurrency)?.label || selectedPaymentCurrency;
+    const selectedPaymentNetworkLabel = paymentNetworkOptions.find(opt => opt.value === selectedPaymentNetwork)?.label || selectedPaymentNetwork;
+
+    return (
+        <div className="min-h-screen flex flex-col">
+        <header className="w-full bg-white sticky top-0 z-10 py-4 flex justify-center border-b border-gray-200">
+            <img src={headerLogo} alt="The Accountant Quits" className="h-8" />
+        </header>
+        {/* Progress bar */}
+        <div className="w-full max-w-4xl mx-auto mt-2 flex items-center justify-between">
+            {steps.map((step, idx) => (
+            <div key={idx} className="flex-1 flex flex-col items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${idx < stepIndex ? 'bg-indigo-300' : idx === stepIndex ? 'bg-indigo-600' : 'bg-gray-300'}`}>
+                <span className="text-white font-bold">{idx+1}</span>
+                </div>
+                <span className={`mt-1 text-sm ${idx < stepIndex ? 'text-[#4b4b4b]' : idx === stepIndex ? 'text-[#4b4b4b]' : 'text-gray-500'}`}>{step}</span>
+                {idx < steps.length - 1 && <div className="flex-1 h-1 bg-gray-300 mx-2"></div>}
+            </div>
+            ))}
+        </div>
+        {!paymentConfirmed ? (
+            <div className="flex flex-col bg-gray-50 overflow-auto py-4 flex-1">
+            <h1 className="text-[2.75rem] font-extrabold mb-0 mt-0.5 text-center text-gray-900">
+                {title}
+            </h1>
+            <p className="mb-3 text-lg text-center text-indigo-600">
+                {subtitle}
+            </p>
+            {!isProductValid && (
+                <p className="text-red-500 mb-2 text-center">
+                Invalid or unspecified product. A default value will be used.
+                </p>
+            )}
+            <div className="w-full max-w-4xl bg-[#F4F4F9] rounded-2xl shadow-xl p-4 sm:p-4 flex flex-col md:flex-row gap-4 items-stretch mx-auto mt-2">
+                {/* Formulario a la izquierda */}
+                <form className="w-full md:w-1/2 flex flex-col gap-2 justify-start" onSubmit={handleSave}>
+                <div>
+                    <label className="block text-gray-700 font-semibold mb-1">First Name</label>
+                    <input
+                    type="text"
+                    name="firstName"
+                    value={buyer.firstName}
+                    onChange={handleChange}
+                    className={`w-full border ${formSaved ? 'bg-gray-100' : ''} border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300`}
+                    placeholder="Enter your first name"
+                    disabled={formSaved}
+                    required
+                    />
+                </div>
+                <div>
+                    <label className="block text-gray-700 font-semibold mb-1">Last Name</label>
+                    <input
+                    type="text"
+                    name="lastName"
+                    value={buyer.lastName}
+                    onChange={handleChange}
+                    className={`w-full border ${formSaved ? 'bg-gray-100' : ''} border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300`}
+                    placeholder="Enter your last name"
+                    disabled={formSaved}
+                    required
+                    />
+                </div>
+                <div>
+                    <label className="block text-gray-700 font-semibold mb-1">Email</label>
+                    <input
+                    type="email"
+                    name="email"
+                    value={buyer.email}
+                    onChange={handleChange}
+                    className={`w-full border ${formSaved ? 'bg-gray-100' : ''} border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300`}
+                    placeholder="Enter your email"
+                    disabled={formSaved}
+                    required
+                    />
+                </div>
+                
+                <button
+                    type="submit"
+                    className={`mt-2 py-1 px-4 rounded-lg font-bold text-white transition-colors ${isFormValid && !formSaved ? "bg-indigo-600 hover:bg-indigo-700" : "bg-gray-300 cursor-not-allowed"}`}
+                    disabled={!isFormValid || formSaved}
+                >
+                    Save & Continue
+                </button>
+                {formSaved && (
+                    <span className="text-[#4b4b4b] font-semibold mt-2">
+                    Great! Your info is saved. Now connect your wallet to complete the payment.
+                    </span>
+                )}
+                </form>
+                {/* Widget a la derecha */}
+                <div className="w-full md:w-1/2 flex flex-col items-center justify-start">
+                {/* Hero image */}
+                <p className="text-center font-bold text-lg text-gray-700 mb-2 flex items-center justify-center">
+                    Product: {productName}
+                </p>
+                <span className="text-xl mb-2 font-bold bg-[#dfffca] shadow-md px-2 py-1 rounded-lg transition-transform hover:scale-105">
+                    {`Total: ${amountInUSD} USD`}
+                </span>
+                <img src={heroImage} alt="product preview" className="w-full rounded-xl mb-4 object-cover mt-1" style={{ maxHeight: '200px' }} />
+                {/* Payment buttons */}
+                <>
+                    {!signer ? (
+                    <button
+                        onClick={handleConnectWallet}
+                        disabled={!formSaved}
+                        className={`mt-3 mb-4 py-1 px-4 rounded-lg font-bold text-white transition-colors ${
+                        formSaved ? "bg-indigo-600 hover:bg-indigo-700" : "bg-gray-300 cursor-not-allowed"
+                        }`}
+                    >
+                        Connect My Wallet
+                    </button>
+                    ) : (
+                    <div className="mt-4 mb-6 rounded-lg border-2 border-indigo-600 bg-indigo-100 p-4 shadow-lg">
+                        <button
+                        disabled
+                        className="mb-4 w-full py-1 px-4 rounded-lg font-bold text-[#4b4b4b] bg-[#dfffca] cursor-not-allowed"
+                        >
+                        <strong>Wallet connected</strong>
+                        </button>
+                        <p className="text-center text-base text-gray-800 mb-3">
+                        Please select the currency and network you wish to use for payment.
+                        </p>
+                        <div className="flex space-x-4">
+                        <div className="relative inline-block flex-1">
+                            <select
+                            value={selectedPaymentCurrency}
+                            onChange={e => setSelectedPaymentCurrency(e.target.value)}
+                            className="appearance-none border border-gray-300 rounded px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition duration-150 ease-in-out pr-8 w-full"
+                            >
+                            {paymentCurrencyOptions.map(option => (
+                                <option key={option.value} value={option.value}>
+                                {option.label}
+                                </option>
+                            ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <path d="M5.516 7.548l4.484 4.482 4.483-4.482h-8.967z" />
+                            </svg>
+                            </div>
+                        </div>
+                        <div className="relative inline-block flex-1">
+                            <select
+                            value={selectedPaymentNetwork}
+                            onChange={e => setSelectedPaymentNetwork(e.target.value)}
+                            className="appearance-none border border-gray-300 rounded px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition duration-150 ease-in-out pr-8 w-full"
+                            > 
+                            {paymentNetworkOptions.map(option => (
+                                <option key={option.value} value={option.value}>
+                                {option.label}
+                                </option>
+                            ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                <path d="M5.516 7.548l4.484 4.482 4.483-4.482h-8.967z" />
+                            </svg>
+                            </div>
+                        </div>
+                        </div>
+                        <button
+                        onClick={initiatePayment}
+                        disabled={!formSaved || isProcessing}
+                        className={`mt-4 w-full py-1 px-4 rounded-lg font-bold text-white transition-colors ${
+                            formSaved && !isProcessing
+                            ? "bg-indigo-600 hover:bg-indigo-700"
+                            : "bg-gray-300 cursor-not-allowed"
+                        }`}
+                        >
+                        {isProcessing ? "Processing..." : `Pay Now`}
+                        </button>
+                        <div className="flex justify-end items-center mt-1 space-x-1">
+                        <span className="text-[0.7rem] text-gray-500">powered by</span>
+                        <img
+                            src="https://storage.googleapis.com/certificates.theaccountantquits.com/assets/Request-Network-Logo-Black-Wordmark-2.svg"
+                            alt="Request Network"
+                            className="h-4 w-auto"
+                        />
+                        <p className="text-[0.7rem] text-gray-500">
+                        &
+                        </p>
+                        <img
+                            src="https://storage.googleapis.com/certificates.theaccountantquits.com/assets/logo-sec-dark-bg.png"
+                            alt="The Accountant Quits"
+                            className="h-5 w-auto"
+                        />
+                        </div>
+                    </div>
+                    )}
+                </>
+                {/* Protocol icons row */}
+                <div className="mt-7 flex items-center space-x-4">
+                    <span className="text-gray-500 text-xs">
+                    We accept USDC and USDT on Ethereum and Polygon networks.
+                    </span>
+                    <img src={iconETH} alt="Ethereum" className="h-5" />
+                    <img src={iconPolygon} alt="USDC" className="h-5" />
+                </div>
+                </div>
+            </div>
+            </div>
+        ) : (
+            <div className="max-w-4xl mx-auto p-6">
+            <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+                <h2 className="text-4xl font-extrabold text-indigo-600 mb-2">
+                {hasBeenPaid ? "🎉 Payment Confirmed!" : "Processing payment"}
+                </h2>
+                <p className="text-lg text-gray-700">
+                    {hasBeenPaid ? (
+                        <>You successfully bought <strong>{productName}</strong>.</>
+                    ) : (
+                        <>Your payment for <strong>{productName}</strong> is being processed.  
+                        Please wait — we’ll email you as soon as the transfer is confirmed.</>
+                    )}
+                </p>
+                <p className="text-lg text-gray-700 mb-6">
+                {hasBeenPaid ? "Check your inbox for invoice details." : ""}
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4 text-left mb-6">
+                <h3 className="text-md font-semibold mb-2">Your purchase at a Glance</h3>
+                <p><strong>Product:</strong> {productName}</p>
+                <p><strong>Payment:</strong> {amountInUSD} USD in {selectedPaymentCurrencyLabel} on {selectedPaymentNetworkLabel}</p>
+                <p><strong>Date:</strong> {txDate}</p>
+                <p>
+                    <strong>Transaction ID:</strong>{" "}
+                    <a href={`${selectedPaymentNetwork === 'sepolia-sepolia' ? 'https://sepolia.etherscan.io/tx/' : selectedPaymentNetwork === 'mainnet' ? 'https://etherscan.io/tx/' : 'https://polygonscan.com/tx/'}${txHash}`} className="text-indigo-600 hover:underline">
+                    {txHash.slice(0,10)}...{txHash.slice(-8)}
+                    </a>
+                </p>
+                </div>
+            </div>
+            </div>
+        )}
+        <footer className="w-full bg-white py-2 mt-auto flex flex-col items-center px-6 text-center text-xs">
+            <img src={logoLight} alt="The Accountant Quits" className="h-10 mb-1" />
+            <span className="text-gray-600">
+            All Rights Reserved {companyName} © {new Date().getFullYear()} <em>(For questions, email us at {emailSupport})</em>
+            </span>
+        </footer>
+        </div>
+    );
+    }
+
+    /* Mount the React app */
+    ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
